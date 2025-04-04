@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
 
-def load_data(path="/Users/andreygurevich/Coding/test_stocks.csv"):
+def load_data(path="test_stocks.csv"):
     df = pd.read_csv(path, index_col=0, parse_dates=True)
     df.index = pd.to_datetime(df.index)
     return df
@@ -63,6 +63,4 @@ def main():
         st.write("Please select at least one stock to display.")
 
 if __name__ == "__main__":
-    df_load = load_data()
-    df_rand = get_rand_data()
     main()
