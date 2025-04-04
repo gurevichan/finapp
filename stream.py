@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
 
-def load_data(path="test_stocks.csv"):
+def load_data(path="stock_data.csv"):
     df = pd.read_csv(path, index_col=0, parse_dates=True)
     df.index = pd.to_datetime(df.index)
     return df
@@ -25,6 +25,10 @@ def apply_moving_average(data, window_size):
     """Apply a moving average to smooth the data."""
     return data.rolling(window=window_size).mean()
 
+def normalize_to_first_date(data):
+    """Normalize data so the first date in the range is zero for all stocks."""
+    return (data/data.iloc[0] - 1) * 100
+
 def plot_stocks(data, stocks):
     """Plot the selected stocks using Plotly."""
     fig = go.Figure()
@@ -45,15 +49,27 @@ def main():
     data = load_data()
     
     stocks = st.multiselect("Select stocks to plot:", options=data.columns, default=data.columns)    
-    # time_range = st.selectbox("Select time range:", options=["Week", "Month", "Year"])
     time_range = st.selectbox("Select time range:", options=["1 Weeks", "2 Weeks", "1 Months", "3 Months", "6 Months", "1 Years", "3 Years"], index=2)
     filtered_data = filter_data(data, time_range)
     
+    # Add a checkbox for relative Y-axis normalization
+    relative_y_axis = st.checkbox("Relative Y axis", value=True)
+    # Add a radio button to select the stock to normalize to
+    normalize_stock = st.radio("Normalize to:", options=["First Date"] + list(data.columns), index=0)
+
+    if relative_y_axis:
+        filtered_data = normalize_to_first_date(filtered_data)        
+    if normalize_stock != "First Date":
+        # subtract normalize_stock from all stocks
+        filtered_data = filtered_data.apply(lambda x: x - filtered_data[normalize_stock] if x.name != normalize_stock else x)
+        filtered_data[normalize_stock] = 0
+
     # Add a slider for moving average window size
     smooth = st.checkbox("Smooth data with moving average")
     if smooth:
         window_size = st.slider("Select moving average window size:", min_value=1, max_value=30, value=5)
         filtered_data = apply_moving_average(filtered_data, window_size)
+    
     
     # Plot the selected stocks
     if stocks:
@@ -63,4 +79,5 @@ def main():
         st.write("Please select at least one stock to display.")
 
 if __name__ == "__main__":
+    # data = load_data('/Users/andreygurevich/Coding/fin_app/test_stocks.csv')
     main()
