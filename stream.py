@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
+from get_stock import MONTH_STOCK_PATH, HIST_STOCK_PATH
 
 # Force wider layout using latest working CSS hack
 st.set_page_config(layout="wide")
@@ -39,26 +40,43 @@ def normalize_to_first_date(data):
 
 def plot_stocks(data, stocks):
     fig = go.Figure()
+
     for stock in stocks:
-        fig.add_trace(go.Scatter(x=data.index, y=data[stock], mode='lines', name=stock))
+        fig.add_trace(go.Scatter(
+            x=data.index.astype(str),  # Convert timestamps to strings
+            y=data[stock],
+            mode='lines',
+            name=stock
+        ))
+
     fig.update_layout(
         title="Stock Prices Over Time",
         xaxis_title="Time",
         yaxis_title="Stock Value",
         legend_title="Stocks",
-        template="plotly_white"
+        template="plotly_dark",
+        xaxis=dict(
+            type='category', # Force categorical x-axis to skip empty dates and times
+            tickmode='linear',
+            dtick=13  # Show one tick every 20 data points (tune this as needed)
+        )
     )
+
     st.plotly_chart(fig, use_container_width=True)
+
+
 
 def main():
     st.title("Stock Price Visualization")
-    data = load_data()
+    hist_data = load_data(HIST_STOCK_PATH)
+    month_data = load_data(MONTH_STOCK_PATH)
+    stocks = hist_data.columns.tolist()
 
     # Sidebar controls
     with st.sidebar:
-        stocks = st.multiselect("Select stocks to plot:", options=data.columns, default=data.columns)    
+        stocks = st.multiselect("Select stocks to plot:", options=stocks, default=stocks)    
         relative_y_axis = st.checkbox("Relative Y axis", value=True)
-        normalize_stock = st.radio("Normalize to:", options=["First Date"] + list(data.columns), index=0, horizontal=False)
+        normalize_stock = st.radio("Normalize to:", options=["First Date"] + list(stocks), index=0, horizontal=False)
         smooth = st.checkbox("Smooth data with moving average")
         if smooth:
             window_size = st.slider("Moving average window size:", min_value=1, max_value=30, value=5)
@@ -68,6 +86,7 @@ def main():
                           horizontal=True)
 
     # Data processing
+    data = month_data if time_range in ["1 Weeks", "2 Weeks", "1 Months"] else hist_data
     filtered_data = filter_data(data, time_range)
 
     if relative_y_axis:
