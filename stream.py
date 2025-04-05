@@ -4,6 +4,9 @@ import plotly.graph_objects as go
 import numpy as np
 from get_stock import MONTH_STOCK_PATH, HIST_STOCK_PATH
 
+
+# Constants
+TIME_RANGES = ["1 Weeks", "2 Weeks", "1 Months", "3 Months", "6 Months", "1 Year", "2 Years", "5 Years"]
 # Force wider layout using latest working CSS hack
 st.set_page_config(layout="wide")
 
@@ -14,6 +17,33 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+import pandas as pd
+import streamlit as st
+
+def color_performance(val):
+    """
+    Colors cell background:
+    - Green for positive values, red for negative.
+    - Color intensity reflects magnitude.
+    """
+    try:
+        val_float = float(val)
+        #: check that val_float is a number
+        if np.isnan(val_float):
+            return ""
+    except:
+        return ""
+
+    # Cap values for intensity scaling
+    capped = min(abs(val_float), 10)
+    intensity = int(255 * (capped / 10))  # Scale 0–10 to 0–255
+
+    if val_float > 0:
+        return f"background-color: rgba(0, {intensity}, 0, 0.5)"
+    elif val_float < 0:
+        return f"background-color: rgba({intensity}, 0, 0, 0.5)"
+    else:
+        return ""
 
 def load_data(path="stock_data.csv"):
     df = pd.read_csv(path, index_col=0, parse_dates=True)
@@ -21,7 +51,12 @@ def load_data(path="stock_data.csv"):
     return df
 
 def filter_data(data, time_range):
-    end_date = data.index.max()
+    curr_data = data.copy()
+    end_date = curr_data.index.max()
+    start_date = calc_start_date(time_range, end_date)
+    return curr_data.loc[(curr_data.index >= start_date) & (curr_data.index <= end_date)]
+
+def calc_start_date(time_range, end_date):
     if "Week" in time_range:
         start_date = end_date - pd.Timedelta(days=7) * int(time_range.split()[0])
     elif "Month" in time_range:
@@ -29,8 +64,8 @@ def filter_data(data, time_range):
     elif "Year" in time_range:
         start_date = end_date - pd.Timedelta(days=365) * int(time_range.split()[0])
     else:
-        return data
-    return data.loc[(data.index >= start_date) & (data.index <= end_date)]
+        start_date = end_date - pd.Timedelta(days=365 * 5)
+    return start_date
 
 def apply_moving_average(data, window_size):
     return data.rolling(window=window_size).mean()
@@ -64,7 +99,29 @@ def plot_stocks(data, stocks):
 
     st.plotly_chart(fig, use_container_width=True)
 
+def calculate_performance(data, time_ranges):
+    performance = {}
+    for stock in data.columns:
+        end_date = data.index.max()
+        last_price = data[stock][end_date]
+        
+        stock_performance = []
+        for time_range in time_ranges:
+            start_date = calc_start_date(time_range, end_date)
+            closest_date = data.loc[(data.index >= start_date)][stock].index[0]
+            start_price = data[stock][closest_date]
+            # if the found date is too far from intended date skip it
+            if (start_date - closest_date).days > 5:
+                stock_performance.append(0)
+                continue
+            if start_price != 0:
+                perf = ((last_price - start_price) / start_price) * 100
+            else:
+                perf = 0
+            stock_performance.append(perf)
 
+        performance[stock] = stock_performance
+    return pd.DataFrame(performance, index=time_ranges).T
 
 def main():
     st.title("Stock Price Visualization")
@@ -82,7 +139,7 @@ def main():
             window_size = st.slider("Moving average window size:", min_value=1, max_value=30, value=5)
     
     time_range = st.radio("Select time range:", 
-                          options=["1 Weeks", "2 Weeks", "1 Months", "3 Months", "6 Months", "1 Years", "3 Years"], index=2,
+                          options=TIME_RANGES, index=2,
                           horizontal=True)
 
     # Data processing
@@ -105,6 +162,17 @@ def main():
         plot_stocks(filtered_data, stocks)
     else:
         st.write("Please select at least one stock to display.")
+
+    # Performance table
+    performance_table = calculate_performance(hist_data[stocks], TIME_RANGES)
+    # Assuming `performance_table` is a DataFrame of floats (as %)
+    styled_df = performance_table.style \
+        .format("{:.2f}%") \
+        .applymap(color_performance)
+
+    st.write("### Stock Performance Summary")
+    st.dataframe(styled_df)
+    # st.dataframe(performance_table.style.format("{:.2f}%"))
 
 
 if __name__ == "__main__":
