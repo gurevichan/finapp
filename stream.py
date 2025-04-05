@@ -17,9 +17,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-import pandas as pd
-import streamlit as st
-
 def color_performance(val, max_diff=20):
     """
     Colors cell background:
@@ -134,7 +131,7 @@ def main():
     with st.sidebar:
         stocks = st.multiselect("Select stocks to plot:", options=stocks, default=stocks)    
         relative_y_axis = st.checkbox("Relative Y axis", value=True)
-        normalize_stock = st.radio("Normalize to:", options=["First Date", "First Week"] + list(stocks), index=0, horizontal=False)
+        normalize_stock = st.radio("Normalize to:", options=["First Date", "First Week", "First Month"] + list(stocks), index=0, horizontal=False)
         smooth = st.checkbox("Smooth data with moving average")
         if smooth:
             window_size = st.slider("Moving average window size:", min_value=1, max_value=30, value=5)
@@ -159,8 +156,9 @@ def main():
 
     # Performance table
     table_data = hist_data[stocks].copy()
-    if not (normalize_stock in ["First Date", "First Week"]):
-        table_data = normalize_to_stock(normalize_stock, table_data)
+
+    if "First" not in normalize_stock:
+        table_data = normalize_data(relative_y_axis, normalize_stock, table_data)
     performance_table = calculate_performance(table_data, TIME_RANGES)
     # Assuming `performance_table` is a DataFrame of floats (as %)
     styled_df = performance_table.style \
@@ -177,6 +175,9 @@ def normalize_data(relative_y_axis, normalize_stock, filtered_data):
                 normalization_val = filtered_data.iloc[0]
             elif "Week" in normalize_stock:
                 end_date = filtered_data.index[0] + pd.Timedelta(days=7)
+                normalization_val = filtered_data.loc[filtered_data.index <= end_date].mean()
+            elif "Month" in normalize_stock:
+                end_date = filtered_data.index[0] + pd.Timedelta(days=30)
                 normalization_val = filtered_data.loc[filtered_data.index <= end_date].mean()
             filtered_data = normalize_to_value(filtered_data, normalization_val)
         else:
