@@ -20,7 +20,7 @@ st.markdown("""
 import pandas as pd
 import streamlit as st
 
-def color_performance(val):
+def color_performance(val, max_diff=20):
     """
     Colors cell background:
     - Green for positive values, red for negative.
@@ -35,8 +35,9 @@ def color_performance(val):
         return ""
 
     # Cap values for intensity scaling
-    capped = min(abs(val_float), 10)
-    intensity = int(255 * (capped / 10))  # Scale 0–10 to 0–255
+    max_diff = 20
+    capped = min(abs(val_float), max_diff)
+    intensity = int(255 * (capped / max_diff))  # Scale 0–max_diff to 0–255
 
     if val_float > 0:
         return f"background-color: rgba(0, {intensity}, 0, 0.5)"
@@ -70,8 +71,8 @@ def calc_start_date(time_range, end_date):
 def apply_moving_average(data, window_size):
     return data.rolling(window=window_size).mean()
 
-def normalize_to_first_date(data):
-    return (data / data.iloc[0] - 1) * 100
+def normalize_to_value(data, value):
+    return (data / value - 1) * 100
 
 def plot_stocks(data, stocks):
     fig = go.Figure()
@@ -133,7 +134,7 @@ def main():
     with st.sidebar:
         stocks = st.multiselect("Select stocks to plot:", options=stocks, default=stocks)    
         relative_y_axis = st.checkbox("Relative Y axis", value=True)
-        normalize_stock = st.radio("Normalize to:", options=["First Date"] + list(stocks), index=0, horizontal=False)
+        normalize_stock = st.radio("Normalize to:", options=["First Date", "First Week"] + list(stocks), index=0, horizontal=False)
         smooth = st.checkbox("Smooth data with moving average")
         if smooth:
             window_size = st.slider("Moving average window size:", min_value=1, max_value=30, value=5)
@@ -146,14 +147,7 @@ def main():
     data = month_data if time_range in ["1 Weeks", "2 Weeks", "1 Months"] else hist_data
     filtered_data = filter_data(data, time_range)
 
-    if relative_y_axis:
-        filtered_data = normalize_to_first_date(filtered_data)
-
-    if normalize_stock != "First Date":
-        filtered_data = filtered_data.apply(
-            lambda x: x - filtered_data[normalize_stock] if x.name != normalize_stock else x)
-        filtered_data[normalize_stock] = 0
-
+    filtered_data = normalize_data(relative_y_axis, normalize_stock, filtered_data)
     if smooth:
         filtered_data = apply_moving_average(filtered_data, window_size)
 
@@ -164,7 +158,10 @@ def main():
         st.write("Please select at least one stock to display.")
 
     # Performance table
-    performance_table = calculate_performance(hist_data[stocks], TIME_RANGES)
+    table_data = hist_data[stocks].copy()
+    if not (normalize_stock in ["First Date", "First Week"]):
+        table_data = normalize_to_stock(normalize_stock, table_data)
+    performance_table = calculate_performance(table_data, TIME_RANGES)
     # Assuming `performance_table` is a DataFrame of floats (as %)
     styled_df = performance_table.style \
         .format("{:.2f}%") \
@@ -172,6 +169,26 @@ def main():
 
     st.write("### Stock Performance Summary")
     st.dataframe(styled_df)
+
+def normalize_data(relative_y_axis, normalize_stock, filtered_data):
+    if relative_y_axis:
+        if "First" in normalize_stock:
+            if "Date" in normalize_stock:
+                normalization_val = filtered_data.iloc[0]
+            elif "Week" in normalize_stock:
+                end_date = filtered_data.index[0] + pd.Timedelta(days=7)
+                normalization_val = filtered_data.loc[filtered_data.index <= end_date].mean()
+            filtered_data = normalize_to_value(filtered_data, normalization_val)
+        else:
+            filtered_data = normalize_to_value(filtered_data, filtered_data.iloc[0]) # normalize to first date first TODO: better way?
+            filtered_data = normalize_to_stock(normalize_stock, filtered_data)
+    return filtered_data
+
+def normalize_to_stock(normalize_stock, filtered_data):
+    filtered_data = filtered_data.apply(
+            lambda x: x - filtered_data[normalize_stock] if x.name != normalize_stock else x)
+    filtered_data[normalize_stock] = 0
+    return filtered_data
     # st.dataframe(performance_table.style.format("{:.2f}%"))
 
 
