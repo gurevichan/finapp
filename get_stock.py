@@ -21,7 +21,7 @@ def get_mutliple_stock_df(tickers, save=True):
     """Get price data for multiple tickers."""
     hist_data, month_data = [], []
     for ticker in tickers:
-        df = get_single_stock_df(ticker_str=ticker, range='5y', dataGranularity='1d')
+        df = get_single_stock_df(ticker_str=ticker, range="10y", dataGranularity='1d')
         # create date column that converts timestamp to date, i.e. removes time and leaves only date
         df['date'] = df['timestamp'].dt.date
         df.set_index('date', inplace=True)
@@ -33,8 +33,8 @@ def get_mutliple_stock_df(tickers, save=True):
         df_month = df_month[['close']].rename(columns={'close': ticker})
         month_data.append(df_month)
 
-    hist_price = pd.concat(hist_data, axis=1, join='outer')
-    month_price = pd.concat(month_data, axis=1, join='outer')
+    hist_price = pd.concat(hist_data, axis=1, join='outer').sort_index()
+    month_price = pd.concat(month_data, axis=1, join='outer').sort_index()
     if save:
         hist_price.to_csv(HIST_STOCK_PATH)
         month_price.to_csv(MONTH_STOCK_PATH)
